@@ -78,6 +78,11 @@ class TestFilter:
             "[[0, 1, 2, 3], [4, 5, 6, 'X'], [7, 8, 9, 'X']]"
         )
 
+    def test_slice_fill_with_evenly_divisible(self, env):
+        # https://github.com/pallets/jinja/issues/2118
+        tmpl = env.from_string("{{ foo|slice(4, 'foo')|list }}")
+        assert tmpl.render(foo=[1, 2, 3, 4]) == "[[1], [2], [3], [4]]"
+
     def test_escape(self, env):
         tmpl = env.from_string("""{{ '<">&'|escape }}""")
         out = tmpl.render()
