@@ -150,10 +150,10 @@ def do_urlencode(
     """Quote data for use in a URL path or query using UTF-8.
 
     Basic wrapper around :func:`urllib.parse.quote` when given a
-    string, or :func:`urllib.parse.urlencode` for a dict or iterable.
+    string, or :func:`urllib.parse.urlencode` for a mapping or iterable.
 
     :param value: Data to quote. A string will be quoted directly. A
-        dict or iterable of ``(key, value)`` pairs will be joined as a
+        mapping or iterable of ``(key, value)`` pairs will be joined as a
         query string.
 
     When given a string, "/" is not quoted. HTTP servers treat "/" and
@@ -165,10 +165,10 @@ def do_urlencode(
     if isinstance(value, str) or not isinstance(value, abc.Iterable):
         return url_quote(value)
 
-    if isinstance(value, dict):
+    if isinstance(value, abc.Mapping):
         items: t.Iterable[tuple[str, t.Any]] = value.items()
     else:
-        items = value  # type: ignore
+        items = value
 
     return "&".join(
         f"{url_quote(k, for_qs=True)}={url_quote(v, for_qs=True)}" for k, v in items

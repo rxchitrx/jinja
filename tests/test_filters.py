@@ -1,5 +1,7 @@
 import random
 from collections import namedtuple
+from collections import UserDict
+from types import MappingProxyType
 
 import pytest
 from markupsafe import Markup
@@ -9,6 +11,7 @@ from jinja2 import StrictUndefined
 from jinja2 import TemplateRuntimeError
 from jinja2 import UndefinedError
 from jinja2.exceptions import TemplateAssertionError
+from jinja2.utils import LRUCache
 
 
 class Magic:
@@ -686,12 +689,60 @@ class TestFilter:
             ({0: 1}, "0=1"),
             ([("a b/c", "a b/c")], "a+b%2Fc=a+b%2Fc"),
             ("a b/c", "a%20b/c"),
+            (
+                UserDict({"Aa": "PersonA@123.com", "Bb": "PersonB@123.com"}),
+                "Aa=PersonA%40123.com&amp;Bb=PersonB%40123.com",
+            ),
+            (UserDict({"a": "1", "b": "2"}), "a=1&amp;b=2"),
+            (
+                MappingProxyType({"a b": "c@d/e"}),
+                "a+b=c%40d%2Fe",
+            ),
         ],
     )
     def test_urlencode(self, value, expect):
         e = Environment(autoescape=True)
         t = e.from_string("{{ value|urlencode }}")
         assert t.render(value=value) == expect
+
+    @pytest.mark.parametrize("mapping_type", [UserDict, MappingProxyType, LRUCache])
+    @pytest.mark.parametrize("autoescape", [False, True])
+    @pytest.mark.parametrize(
+        ("value", "expect"),
+        [
+            ({}, ""),
+            ({"\u203d": "caf\u00e9"}, "%E2%80%BD=caf%C3%A9"),
+            ({0: None, "flag": False}, "0=None&flag=False"),
+            ({b"a b": b"c/d"}, "a+b=c%2Fd"),
+            ({"a&=+%#": "<&=+%#>"}, "a%26%3D%2B%25%23=%3C%26%3D%2B%25%23%3E"),
+            ({"": "", "a": ""}, "=&a="),
+        ],
+    )
+    def test_urlencode_mapping_edge_cases(
+        self, mapping_type, autoescape, value, expect
+    ):
+        if mapping_type is LRUCache:
+            mapping = LRUCache(10)
+            for key, item in value.items():
+                mapping[key] = item
+            # The cache exposes items in most-recently-used order.
+            expect = "&".join(reversed(expect.split("&")))
+        else:
+            mapping = mapping_type(value)
+
+        e = Environment(autoescape=autoescape)
+        tmpl = e.from_string("{{ value|urlencode }}")
+        if autoescape:
+            expect = expect.replace("&", "&amp;")
+        assert tmpl.render(value=mapping) == expect
+
+    @pytest.mark.parametrize("autoescape", [False, True])
+    def test_urlencode_pair_iterator(self, autoescape):
+        e = Environment(autoescape=autoescape)
+        tmpl = e.from_string("{{ value|urlencode }}")
+        pairs = (("a", value) for value in ["1", "2"])
+        expect = "a=1&amp;a=2" if autoescape else "a=1&a=2"
+        assert tmpl.render(value=pairs) == expect
 
     def test_simple_map(self, env):
         env = Environment()
